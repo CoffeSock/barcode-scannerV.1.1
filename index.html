@@ -10,11 +10,12 @@ body {
   font-family: system-ui, Arial, sans-serif;
   background: #0b0b0f;
   color: white;
-  padding-bottom: 170px;
-  transition: background 0.6s ease;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
-/* soft glow layer */
+/* soft glow */
 body::before {
   content: "";
   position: fixed;
@@ -39,15 +40,15 @@ body.state-invalid {
 /* TITLE */
 h2 {
   text-align: center;
-  margin: 14px 0;
-  font-size: 1.4rem;
+  margin: 10px 0;
+  font-size: 1.3rem;
   font-weight: 600;
 }
 
 /* CAMERA */
 video {
   width: 100%;
-  height: 52vh;
+  height: 45vh;
   object-fit: cover;
   border-radius: 18px;
   margin: 10px;
@@ -57,24 +58,20 @@ video {
 /* RESULT */
 .card {
   text-align: center;
-  font-size: 2rem;
-  padding: 20px;
+  font-size: 1.8rem;
+  padding: 18px;
   margin: 10px;
   border-radius: 16px;
 
   background: rgba(255,255,255,0.06);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-
-  box-shadow: 0 8px 30px rgba(0,0,0,0.35);
-  transition: all 0.35s ease;
 }
 
 /* STATUS */
 #status {
   text-align: center;
   opacity: 0.6;
-  margin-bottom: 8px;
   font-size: 0.9rem;
 }
 
@@ -100,37 +97,37 @@ video {
 .used { color: #fbbf24; }
 .invalid { color: #fb7185; }
 
-/* BUTTON AREA (STACKED) */
+/* CONTROL AREA TAKES REMAINING SPACE */
 .controls {
-  position: fixed;
-  bottom: 0;
-  width: 100%;
+  flex: 1;                  /* 👈 KEY: fills remaining screen */
   display: flex;
-  flex-direction: column;   /* 👈 STACKED */
-  gap: 10px;
+  flex-direction: column;
+  gap: 12px;
   padding: 12px;
   padding-bottom: calc(12px + env(safe-area-inset-bottom));
   background: rgba(10,10,15,0.75);
   backdrop-filter: blur(14px);
 }
 
-/* BIG FULL-WIDTH BUTTONS */
+/* BIG FULL HEIGHT BUTTONS */
 button {
+  flex: 1;                 /* 👈 each button takes equal space */
   width: 100%;
-  min-height: 64px;
-  font-size: 1.1rem;
-  font-weight: 700;
+  font-size: 1.3rem;
+  font-weight: 800;
   border: none;
-  border-radius: 16px;
+  border-radius: 18px;
   transition: transform 0.15s ease, filter 0.2s ease;
   touch-action: manipulation;
 }
 
+/* press effect */
 button:active {
   transform: scale(0.97);
   filter: brightness(0.9);
 }
 
+/* gradients */
 #startBtn {
   background: linear-gradient(135deg, #22c55e, #16a34a);
   color: black;
@@ -159,8 +156,8 @@ button:active {
 </div>
 
 <div class="controls">
-  <button id="startBtn">▶ Start</button>
-  <button id="stopBtn">⏹ Stop</button>
+  <button id="startBtn">▶ START SCAN</button>
+  <button id="stopBtn">⏹ STOP SCAN</button>
 </div>
 
 <script type="module">
@@ -211,98 +208,81 @@ stopBtn.onclick = () => {
 
 if (!("BarcodeDetector" in window)) {
   resultDiv.textContent = "BarcodeDetector NOT supported";
-  statusDiv.textContent = "Use Chrome or Edge";
 }
 
 async function init() {
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: "environment" }
-    });
+  stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: "environment" }
+  });
 
-    video.srcObject = stream;
-    await video.play();
+  video.srcObject = stream;
+  await video.play();
 
-    detector = new BarcodeDetector({
-      formats: ["ean_13","ean_8","upc_a","upc_e","code_128","code_39","itf"]
-    });
+  detector = new BarcodeDetector({
+    formats: ["ean_13","ean_8","upc_a","upc_e","code_128","code_39","itf"]
+  });
 
-    scanLoop();
-
-  } catch (err) {
-    console.error(err);
-    resultDiv.textContent = "Camera error";
-  }
+  scanLoop();
 }
 
 async function scanLoop() {
   if (!scanning) return;
 
-  try {
-    if (video.readyState === video.HAVE_ENOUGH_DATA) {
-      const barcodes = await detector.detect(video);
+  if (video.readyState === video.HAVE_ENOUGH_DATA) {
+    const barcodes = await detector.detect(video);
 
-      if (barcodes.length > 0) {
-        const value = barcodes[0].rawValue;
+    if (barcodes.length > 0) {
+      const value = barcodes[0].rawValue;
 
-        resultDiv.textContent = "Checking: " + value;
-        await checkCode(value);
+      resultDiv.textContent = "Checking: " + value;
+      await checkCode(value);
 
-        scanning = false;
+      scanning = false;
 
-        setTimeout(() => {
-          resultDiv.textContent = "Ready...";
-          scanning = true;
-          scanLoop();
-        }, 1500);
+      setTimeout(() => {
+        resultDiv.textContent = "Ready...";
+        scanning = true;
+        scanLoop();
+      }, 1500);
 
-        return;
-      }
+      return;
     }
-  } catch (err) {
-    console.error(err);
   }
 
   requestAnimationFrame(scanLoop);
 }
 
 async function checkCode(code) {
-  try {
-    const codeRef = doc(db, "codes", code);
-    const docSnap = await getDoc(codeRef);
+  const codeRef = doc(db, "codes", code);
+  const docSnap = await getDoc(codeRef);
 
-    if (navigator.vibrate) navigator.vibrate(100);
+  if (navigator.vibrate) navigator.vibrate(100);
 
-    document.body.className = "";
+  document.body.className = "";
 
-    if (!docSnap.exists()) {
-      invalidCount++;
-      invalidEl.textContent = invalidCount;
-      resultDiv.textContent = "❌ Not invited";
-      document.body.className = "state-invalid";
-    } 
-    else if (docSnap.data().used) {
-      usedCount++;
-      usedEl.textContent = usedCount;
-      resultDiv.textContent = "⚠️ Already used";
-      document.body.className = "state-used";
-    } 
-    else {
-      await updateDoc(codeRef, { used: true });
-      acceptedCount++;
-      acceptedEl.textContent = acceptedCount;
-      resultDiv.textContent = "✅ Accepted";
-      document.body.className = "state-accepted";
-    }
-
-    setTimeout(() => {
-      document.body.className = "";
-    }, 800);
-
-  } catch (err) {
-    console.error(err);
-    resultDiv.textContent = "Error";
+  if (!docSnap.exists()) {
+    invalidCount++;
+    invalidEl.textContent = invalidCount;
+    resultDiv.textContent = "❌ Not invited";
+    document.body.className = "state-invalid";
+  } 
+  else if (docSnap.data().used) {
+    usedCount++;
+    usedEl.textContent = usedCount;
+    resultDiv.textContent = "⚠️ Already used";
+    document.body.className = "state-used";
+  } 
+  else {
+    await updateDoc(codeRef, { used: true });
+    acceptedCount++;
+    acceptedEl.textContent = acceptedCount;
+    resultDiv.textContent = "✅ Accepted";
+    document.body.className = "state-accepted";
   }
+
+  setTimeout(() => {
+    document.body.className = "";
+  }, 800);
 }
 </script>
 
