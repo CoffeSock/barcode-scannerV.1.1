@@ -1,27 +1,39 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
-  <title>Native Barcode Scanner</title>
+<meta charset="UTF-8">
+<title>Native Barcode Scanner</title>
+
 <style>
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, Arial, sans-serif;
+  font-family: system-ui, Arial, sans-serif;
   background: #0b0b0f;
   color: white;
   padding-bottom: 90px;
-  transition: background 0.4s ease;
-  overflow-x: hidden;
+  transition: background 0.6s ease;
 }
 
-/* subtle animated glow background layer */
+/* soft glow layer */
 body::before {
   content: "";
   position: fixed;
   inset: 0;
-  background: radial-gradient(circle at top, rgba(255,255,255,0.06), transparent 60%),
-              radial-gradient(circle at bottom, rgba(255,255,255,0.04), transparent 60%);
   pointer-events: none;
+  background: radial-gradient(circle at top, rgba(255,255,255,0.05), transparent 60%);
+}
+
+/* STATES (smooth backgrounds) */
+body.state-accepted {
+  background: radial-gradient(circle at top, #1b4332, #0b0b0f 70%);
+}
+
+body.state-used {
+  background: radial-gradient(circle at top, #3a2a10, #0b0b0f 70%);
+}
+
+body.state-invalid {
+  background: radial-gradient(circle at top, #3a1212, #0b0b0f 70%);
 }
 
 /* TITLE */
@@ -30,7 +42,6 @@ h2 {
   margin: 14px 0;
   font-size: 1.4rem;
   font-weight: 600;
-  letter-spacing: 0.5px;
 }
 
 /* CAMERA */
@@ -56,7 +67,6 @@ video {
   -webkit-backdrop-filter: blur(12px);
 
   box-shadow: 0 8px 30px rgba(0,0,0,0.35);
-
   transition: all 0.35s ease;
 }
 
@@ -68,7 +78,7 @@ video {
   font-size: 0.9rem;
 }
 
-/* STATS PANEL */
+/* STATS */
 .stats {
   display: flex;
   justify-content: space-around;
@@ -85,41 +95,41 @@ video {
   font-weight: 600;
 }
 
-/* SOFT STATUS COLORS (no harsh solid colors) */
+/* SOFT COLORS */
 .accepted { color: #4ade80; }
 .used { color: #fbbf24; }
 .invalid { color: #fb7185; }
 
-/* BUTTON BAR */
+/* BUTTON BAR (UPDATED FOR MOBILE) */
 .controls {
   position: fixed;
   bottom: 0;
   width: 100%;
   display: flex;
-  gap: 6px;
-  padding: 8px;
-  background: rgba(10,10,15,0.7);
-  backdrop-filter: blur(12px);
+  gap: 10px;
+  padding: 12px;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  background: rgba(10,10,15,0.75);
+  backdrop-filter: blur(14px);
 }
 
-/* BUTTONS */
+/* BIGGER MOBILE BUTTONS */
 button {
   flex: 1;
-  padding: 16px;
-  font-size: 1rem;
+  min-height: 62px;
+  font-size: 1.05rem;
+  font-weight: 700;
   border: none;
-  border-radius: 14px;
-  font-weight: 600;
+  border-radius: 16px;
   transition: transform 0.15s ease, filter 0.2s ease;
+  touch-action: manipulation;
 }
 
-/* press effect */
 button:active {
-  transform: scale(0.97);
+  transform: scale(0.96);
   filter: brightness(0.9);
 }
 
-/* SOFT GRADIENT BUTTONS */
 #startBtn {
   background: linear-gradient(135deg, #22c55e, #16a34a);
   color: black;
@@ -134,28 +144,12 @@ button:active {
   background: linear-gradient(135deg, #60a5fa, #3b82f6);
   color: white;
 }
-
-/* SMOOTH BODY STATES (replace your JS colors with these classes if you want upgrade later) */
-body.state-accepted {
-  background: radial-gradient(circle at top, #14532d, #0b0b0f 60%);
-}
-
-body.state-used {
-  background: radial-gradient(circle at top, #78350f, #0b0b0f 60%);
-}
-
-body.state-invalid {
-  background: radial-gradient(circle at top, #7f1d1d, #0b0b0f 60%);
-}
 </style>
 </head>
 
 <body>
 
 <h2>🎟 Barcode Scanner</h2>
-
-
-
 
 <video id="video" autoplay></video>
 
@@ -170,16 +164,14 @@ body.state-invalid {
 
 <div class="controls">
   <button id="startBtn">▶ Start</button>
-<button id="stopBtn">⏹ Stop</button>
-<button id="modeBtn">➕ Add</button>
+  <button id="stopBtn">⏹ Stop</button>
+  <button id="modeBtn">➕ Add</button>
 </div>
-
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getFirestore, doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-// -------------------- FIREBASE --------------------
 const firebaseConfig = {
   apiKey: "AIzaSyBm1iZ3twTkqf4sxwKunm9v7dQ4L6o1ZFM",
   authDomain: "barcode-scanner-ca39c.firebaseapp.com",
@@ -189,7 +181,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// -------------------- UI --------------------
 const video = document.getElementById("video");
 const resultDiv = document.getElementById("result");
 const statusDiv = document.getElementById("status");
@@ -197,7 +188,6 @@ const statusDiv = document.getElementById("status");
 const startBtn = document.getElementById("startBtn");
 const stopBtn = document.getElementById("stopBtn");
 
-// counters
 let acceptedCount = 0;
 let usedCount = 0;
 let invalidCount = 0;
@@ -206,12 +196,10 @@ const acceptedEl = document.getElementById("accepted");
 const usedEl = document.getElementById("used");
 const invalidEl = document.getElementById("invalid");
 
-// state
 let stream;
 let detector;
 let scanning = false;
 
-// -------------------- BUTTONS --------------------
 startBtn.onclick = () => {
   if (!scanning) {
     scanning = true;
@@ -226,13 +214,11 @@ stopBtn.onclick = () => {
   statusDiv.textContent = "Scanner stopped";
 };
 
-// -------------------- SUPPORT CHECK --------------------
 if (!("BarcodeDetector" in window)) {
   resultDiv.textContent = "BarcodeDetector NOT supported";
   statusDiv.textContent = "Use Chrome or Edge";
 }
 
-// -------------------- INIT --------------------
 async function init() {
   try {
     stream = await navigator.mediaDevices.getUserMedia({
@@ -254,7 +240,6 @@ async function init() {
   }
 }
 
-// -------------------- SCAN LOOP --------------------
 async function scanLoop() {
   if (!scanning) return;
 
@@ -268,7 +253,6 @@ async function scanLoop() {
         resultDiv.textContent = "Checking: " + value;
         await checkCode(value);
 
-        // pause briefly before next scan
         scanning = false;
 
         setTimeout(() => {
@@ -287,27 +271,28 @@ async function scanLoop() {
   requestAnimationFrame(scanLoop);
 }
 
-// -------------------- FIREBASE CHECK --------------------
 async function checkCode(code) {
-  
   try {
     const codeRef = doc(db, "codes", code);
     const docSnap = await getDoc(codeRef);
+
     if (navigator.vibrate) navigator.vibrate(100);
+
+    document.body.className = "";
 
     if (!docSnap.exists()) {
       invalidCount++;
       invalidEl.textContent = invalidCount;
 
       resultDiv.textContent = "❌ Not invited";
-      document.body.className = "state-accepted";
+      document.body.className = "state-invalid";
     } 
     else if (docSnap.data().used) {
       usedCount++;
       usedEl.textContent = usedCount;
 
       resultDiv.textContent = "⚠️ Already used";
-      document.body.className = "state-accepted";
+      document.body.className = "state-used";
     } 
     else {
       await updateDoc(codeRef, { used: true });
@@ -319,13 +304,14 @@ async function checkCode(code) {
       document.body.className = "state-accepted";
     }
 
+    setTimeout(() => {
+      document.body.className = "";
+    }, 800);
+
   } catch (err) {
     console.error(err);
     resultDiv.textContent = "Error";
   }
-  setTimeout(() => {
-    document.body.className = "";
-  }, 400);
 }
 </script>
 
